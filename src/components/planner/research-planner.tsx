@@ -22,6 +22,8 @@ const INITIAL_STATE = {
   decideStep: 0,
   decideAnswers: {} as DecideAnswers,
   messages: [] as ChatMessage[],
+  suggestions: [] as string[],
+  progress: null as Record<string, boolean> | null,
   plan: null as ResearchPlan | null,
   isThinking: false,
   error: null as string | null,
@@ -35,13 +37,18 @@ export function ResearchPlanner() {
   const reset = () => setState(INITIAL_STATE);
 
   const sendMessage = async (text: string) => {
-    const messages: ChatMessage[] = [...state.messages, { role: "user", content: text }];
+    const messages: ChatMessage[] = [
+      ...state.messages,
+      { role: "user" as const, content: text },
+      { role: "assistant" as const, content: "" },
+    ];
 
     setState((current) => ({
       ...current,
       screen: "chat",
       messages,
       inputText: "",
+      suggestions: [],
       isThinking: true,
       error: null,
       plan: null,
@@ -51,43 +58,145 @@ export function ResearchPlanner() {
       const response = await fetch("/api/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages }),
+        body: JSON.stringify({ messages: messages.slice(0, -1) }), // don't send empty assistant
       });
 
-      const data = (await response.json()) as {
-        plan?: ResearchPlan;
-        reply?: string;
-        error?: string;
-      };
-
       if (!response.ok) {
-        throw new Error(data.error ?? "Something went wrong.");
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          (errorData as { error?: string })?.error ?? `HTTP ${response.status}`,
+        );
       }
 
-      if (data.plan) {
-        setState((current) => ({
-          ...current,
-          plan: data.plan ?? null,
-          isThinking: false,
-        }));
-        return;
-      }
+      // Streaming response
+      if (response.headers.get("content-type")?.includes("text/event-stream")) {
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error("No response body");
 
-      if (data.reply) {
-        setState((current) => ({
-          ...current,
-          messages: [...current.messages, { role: "assistant", content: data.reply ?? "" }],
-          isThinking: false,
-        }));
-        return;
-      }
+        const decoder = new TextDecoder();
+        let fullText = "";
+        let buffer = "";
 
-      throw new Error("No plan or reply received.");
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || !trimmed.startsWith("data:")) continue;
+
+            const payload = trimmed.slice(5).trim();
+            if (payload === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(payload) as {
+                delta?: string;
+                done?: boolean;
+                reply?: string;
+                suggestions?: string[];
+                progress?: Record<string, boolean> | null;
+                plan?: ResearchPlan;
+                error?: string;
+              };
+
+              if (parsed.error) {
+                throw new Error(parsed.error);
+              }
+
+              if (parsed.plan) {
+                setState((current) => ({
+                  ...current,
+                  plan: parsed.plan!,
+                  isThinking: false,
+                }));
+                return;
+              }
+
+              if (parsed.delta) {
+                fullText += parsed.delta;
+                // Update last assistant message
+                setState((current) => {
+                  const msgs = [...current.messages];
+                  msgs[msgs.length - 1] = {
+                    role: "assistant",
+                    content: fullText,
+                  };
+                  return { ...current, messages: msgs, isThinking: true };
+                });
+              }
+
+              if (parsed.done) {
+                setState((current) => {
+                  const msgs = [...current.messages];
+                  msgs[msgs.length - 1] = {
+                    role: "assistant",
+                    content: parsed.reply ?? fullText,
+                  };
+                  return {
+                    ...current,
+                    messages: msgs,
+                    suggestions: parsed.suggestions ?? [],
+                    progress: parsed.progress ?? current.progress,
+                    isThinking: false,
+                  };
+                });
+                return;
+              }
+            } catch (parseError) {
+              // skip unparseable chunks
+              if (parseError instanceof Error && parseError.message !== "skip") {
+                throw parseError;
+              }
+            }
+          }
+        }
+      } else {
+        // Non-streaming fallback
+        const data = (await response.json()) as {
+          plan?: ResearchPlan;
+          reply?: string;
+          suggestions?: string[];
+          progress?: Record<string, boolean> | null;
+          error?: string;
+        };
+
+        if (data.plan) {
+          setState((current) => ({
+            ...current,
+            plan: data.plan!,
+            isThinking: false,
+          }));
+          return;
+        }
+
+        if (data.reply) {
+          setState((current) => ({
+            ...current,
+            messages: [
+              ...current.messages.slice(0, -1),
+              { role: "assistant", content: data.reply! },
+            ],
+            suggestions: data.suggestions ?? [],
+            progress: data.progress ?? current.progress,
+            isThinking: false,
+          }));
+          return;
+        }
+
+        throw new Error("No plan or reply received.");
+      }
     } catch (error) {
       setState((current) => ({
         ...current,
         isThinking: false,
-        error: error instanceof Error ? error.message : "Something went wrong. Please try again.",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Something went wrong. Please try again.",
       }));
     }
   };
@@ -95,6 +204,8 @@ export function ResearchPlanner() {
   const submit = (overridePrompt?: string) => {
     const prompt = (overridePrompt ?? state.inputText).trim();
     if (!prompt) return;
+    // Clear suggestions when user sends a message
+    setState((current) => ({ ...current, suggestions: [] }));
     void sendMessage(prompt);
   };
 
@@ -137,7 +248,10 @@ export function ResearchPlanner() {
           onModeKnow={() => setState((current) => ({ ...current, mode: "know" }))}
           onInputChange={(value) => setState((current) => ({ ...current, inputText: value }))}
           onSubmit={() => submit()}
-          onPickExample={(label) => setState((current) => ({ ...current, inputText: label }))}
+          onPickExample={(label) => {
+            setState((current) => ({ ...current, inputText: label }));
+            void sendMessage(label);
+          }}
           onPickDecideOption={pickDecideOption}
         />
       ) : null}
@@ -146,12 +260,18 @@ export function ResearchPlanner() {
         <ChatScreen
           messages={state.messages}
           plan={state.plan}
+          suggestions={state.suggestions}
+          progress={state.progress}
           isThinking={state.isThinking}
           error={state.error}
           inputText={state.inputText}
           onInputChange={(value) => setState((current) => ({ ...current, inputText: value }))}
           onSubmit={() => submit()}
-          onPickExample={(label) => setState((current) => ({ ...current, inputText: label }))}
+          onPickSuggestion={(suggestion) => submit(suggestion)}
+          onPickExample={(label) => {
+            setState((current) => ({ ...current, inputText: label }));
+            void sendMessage(label);
+          }}
           onOpenPlan={() =>
             setState((current) => ({
               ...current,
