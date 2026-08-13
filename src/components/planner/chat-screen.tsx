@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EXAMPLES } from "@/lib/planner/constants";
 import type { ResearchPlan } from "@/lib/planner/types";
 import { ChecklistPanel, PromptInput } from "@/components/planner/planner-ui";
@@ -159,6 +159,33 @@ function ThinkingDots() {
       <span className="inline-block animate-[qrp-pulse_1.4s_infinite]">.</span>
       <span className="inline-block animate-[qrp-pulse_1.4s_infinite_0.2s]">.</span>
       <span className="inline-block animate-[qrp-pulse_1.4s_infinite_0.4s]">.</span>
+    </>
+  );
+}
+
+const STATUS_MESSAGES = [
+  "Account manager is reading your brief…",
+  "Thinking through the best approach…",
+  "Formulating the research questions…",
+  "Drafting the research plan…",
+];
+
+function RotatingStatus() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setIndex((i) => (i + 1) % STATUS_MESSAGES.length);
+    }, 2600);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <>
+      <span key={index} className="inline-block animate-[qrp-fade_0.6s_ease]">
+        {STATUS_MESSAGES[index]}
+      </span>
+      <ThinkingDots />
     </>
   );
 }
