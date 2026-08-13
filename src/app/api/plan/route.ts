@@ -1,52 +1,102 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
-import { RESEARCH_PLANNER_SYSTEM_PROMPT } from "@/lib/planner/prompt";
 import type { ResearchPlan } from "@/lib/planner/types";
 
-const DEFAULT_MODEL = "claude-sonnet-4-5-20250929";
+const DEFAULT_BASE_URL = "https://agent.kbpm.nl/v1";
+const DEFAULT_MODEL = "qare";
 
-function parsePlanResponse(text: string): ResearchPlan {
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
+function isResearchPlan(value: unknown): value is ResearchPlan {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.summary === "string" &&
+    typeof v.recommendationTitle === "string" &&
+    typeof v.estimatedInvestment === "number" &&
+    Array.isArray(v.investmentBreakdown)
+  );
+}
+
+function tryParsePlan(text: string): ResearchPlan | null {
   const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-  return JSON.parse(cleaned) as ResearchPlan;
+  const candidates = [cleaned];
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start !== -1 && end > start) {
+    candidates.push(cleaned.slice(start, end + 1));
+  }
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (isResearchPlan(parsed)) return parsed as ResearchPlan;
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.HERMES_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY is not configured." },
+      { error: "HERMES_API_KEY is not configured." },
       { status: 500 },
     );
   }
 
-  const body = (await request.json().catch(() => null)) as { prompt?: string } | null;
-  const prompt = body?.prompt?.trim();
+  const body = (await request.json().catch(() => null)) as {
+    prompt?: string;
+    messages?: ChatMessage[];
+  } | null;
 
-  if (!prompt) {
+  const history: ChatMessage[] = (body?.messages ?? []).filter(
+    (m) => m && m.content && m.content.trim().length > 0,
+  );
+  const prompt = (body?.prompt ?? "").trim();
+  if (prompt) history.push({ role: "user", content: prompt });
+  if (history.length === 0) {
     return NextResponse.json({ error: "Prompt is required." }, { status: 422 });
   }
 
-  const anthropic = new Anthropic({ apiKey });
-  const model = process.env.ANTHROPIC_MODEL ?? DEFAULT_MODEL;
+  const baseUrl = (process.env.HERMES_BASE_URL ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const model = process.env.HERMES_MODEL ?? DEFAULT_MODEL;
 
   try {
-    const message = await anthropic.messages.create({
-      model,
-      max_tokens: 3200,
-      system: RESEARCH_PLANNER_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: prompt }],
+    const upstream = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        max_tokens: 4000,
+        messages: history,
+      }),
     });
 
-    const textBlock = message.content.find((block) => block.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
+    if (!upstream.ok) {
+      const text = await upstream.text();
       return NextResponse.json(
-        { error: "No text response from the model." },
+        { error: `Hermes upstream error (${upstream.status}): ${text.slice(0, 300)}` },
         { status: 502 },
       );
     }
 
-    const plan = parsePlanResponse(textBlock.text);
-    return NextResponse.json({ plan });
+    const data = (await upstream.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = data.choices?.[0]?.message?.content?.trim() ?? "";
+
+    if (!content) {
+      return NextResponse.json({ error: "Empty response from Hermes." }, { status: 502 });
+    }
+
+    const plan = tryParsePlan(content);
+    if (plan) return NextResponse.json({ plan });
+    return NextResponse.json({ reply: content });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Plan generation failed.";
     return NextResponse.json({ error: detail }, { status: 502 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { ChatScreen } from "@/components/planner/chat-screen";
 import { PlanScreen } from "@/components/planner/plan-screen";
 import { PlannerHeader } from "@/components/planner/planner-ui";
@@ -13,16 +13,17 @@ import type {
   ResearchPlan,
 } from "@/lib/planner/types";
 
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
 const INITIAL_STATE = {
   mode: "know" as PlannerMode,
   screen: "start" as PlannerScreen,
   inputText: "",
   decideStep: 0,
   decideAnswers: {} as DecideAnswers,
-  userPrompt: "",
+  messages: [] as ChatMessage[],
   plan: null as ResearchPlan | null,
-  checkedCount: 0,
-  apiDone: false,
+  isThinking: false,
   error: null as string | null,
   activeNav: "recommendation" as NavSectionId,
   additions: {} as Record<string, boolean>,
@@ -30,70 +31,63 @@ const INITIAL_STATE = {
 
 export function ResearchPlanner() {
   const [state, setState] = useState(INITIAL_STATE);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const clearProgressInterval = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
+  const reset = () => setState(INITIAL_STATE);
 
-  useEffect(() => clearProgressInterval, [clearProgressInterval]);
+  const sendMessage = async (text: string) => {
+    const messages: ChatMessage[] = [...state.messages, { role: "user", content: text }];
 
-  const reset = () => {
-    clearProgressInterval();
-    setState(INITIAL_STATE);
-  };
-
-  const generatePlan = async (prompt: string) => {
     setState((current) => ({
       ...current,
       screen: "chat",
-      userPrompt: prompt,
+      messages,
       inputText: "",
-      checkedCount: 0,
-      apiDone: false,
-      plan: null,
+      isThinking: true,
       error: null,
+      plan: null,
     }));
-
-    clearProgressInterval();
-    intervalRef.current = setInterval(() => {
-      setState((current) =>
-        current.checkedCount < 9
-          ? { ...current, checkedCount: current.checkedCount + 1 }
-          : current,
-      );
-    }, 380);
 
     try {
       const response = await fetch("/api/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ messages }),
       });
 
-      const data = (await response.json()) as { plan?: ResearchPlan; error?: string };
+      const data = (await response.json()) as {
+        plan?: ResearchPlan;
+        reply?: string;
+        error?: string;
+      };
 
-      if (!response.ok || !data.plan) {
-        throw new Error(data.error ?? "Something went wrong generating your plan.");
+      if (!response.ok) {
+        throw new Error(data.error ?? "Something went wrong.");
       }
 
-      setState((current) => ({
-        ...current,
-        plan: data.plan ?? null,
-        apiDone: true,
-      }));
+      if (data.plan) {
+        setState((current) => ({
+          ...current,
+          plan: data.plan ?? null,
+          isThinking: false,
+        }));
+        return;
+      }
+
+      if (data.reply) {
+        setState((current) => ({
+          ...current,
+          messages: [...current.messages, { role: "assistant", content: data.reply ?? "" }],
+          isThinking: false,
+        }));
+        return;
+      }
+
+      throw new Error("No plan or reply received.");
     } catch (error) {
       setState((current) => ({
         ...current,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Something went wrong generating your plan. Please try again.",
-        apiDone: true,
-        checkedCount: 9,
+        isThinking: false,
+        error: error instanceof Error ? error.message : "Something went wrong. Please try again.",
       }));
     }
   };
@@ -101,7 +95,7 @@ export function ResearchPlanner() {
   const submit = (overridePrompt?: string) => {
     const prompt = (overridePrompt ?? state.inputText).trim();
     if (!prompt) return;
-    void generatePlan(prompt);
+    void sendMessage(prompt);
   };
 
   const pickDecideOption = (label: string) => {
@@ -120,7 +114,7 @@ export function ResearchPlanner() {
 
     const prompt = `Goal: ${answers.goal}. Audience: ${answers.audience}. Timeline needed: ${label}.`;
     setState((current) => ({ ...current, decideAnswers: answers }));
-    void generatePlan(prompt);
+    void sendMessage(prompt);
   };
 
   return (
@@ -150,10 +144,9 @@ export function ResearchPlanner() {
 
       {state.screen === "chat" ? (
         <ChatScreen
-          userPrompt={state.userPrompt}
+          messages={state.messages}
           plan={state.plan}
-          checkedCount={state.checkedCount}
-          apiDone={state.apiDone}
+          isThinking={state.isThinking}
           error={state.error}
           inputText={state.inputText}
           onInputChange={(value) => setState((current) => ({ ...current, inputText: value }))}
