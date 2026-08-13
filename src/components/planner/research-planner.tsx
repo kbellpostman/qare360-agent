@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import { ChatScreen } from "@/components/planner/chat-screen";
 import { PlanScreen } from "@/components/planner/plan-screen";
 import { PlannerHeader } from "@/components/planner/planner-ui";
@@ -118,17 +119,23 @@ export function ResearchPlanner() {
 
               if (parsed.delta) {
                 fullText += parsed.delta;
-                // Strip [CHIPS: ...] from displayed text — chips appear separately
-                const chipsIdx = fullText.lastIndexOf("[CHIPS:");
-                const displayText = chipsIdx >= 0 ? fullText.slice(0, chipsIdx).trim() : fullText;
-                // Update last assistant message
-                setState((current) => {
-                  const msgs = [...current.messages];
-                  msgs[msgs.length - 1] = {
-                    role: "assistant",
-                    content: displayText,
-                  };
-                  return { ...current, messages: msgs, isThinking: true };
+                // Strip [PROGRESS]...[/PROGRESS] and [CHIPS: ...] from displayed text
+                let displayText = fullText;
+                // Remove progress metadata blocks
+                displayText = displayText.replace(/\[PROGRESS\][\s\S]*?\[\/PROGRESS\]/g, "");
+                // Hide CHIPS line if present
+                const chipsIdx = displayText.lastIndexOf("[CHIPS:");
+                displayText = chipsIdx >= 0 ? displayText.slice(0, chipsIdx).trim() : displayText.trim();
+                // Update last assistant message — flushSync forces real-time rendering
+                flushSync(() => {
+                  setState((current) => {
+                    const msgs = [...current.messages];
+                    msgs[msgs.length - 1] = {
+                      role: "assistant",
+                      content: displayText,
+                    };
+                    return { ...current, messages: msgs, isThinking: true };
+                  });
                 });
               }
 
