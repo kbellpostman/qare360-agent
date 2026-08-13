@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  @keyframes qrp-pulse { 0%,80%,100%{opacity:.25} 40%{opacity:1} }
+  @keyframes qrp-spin { from{transform:rotate(0deg)} to{transform:rotate(-360deg)} }
+  body { margin:0; background:#fff; }
+</style>
+</helmet>
+<div style="min-height:100vh; width:100%; font-family:Helvetica,Arial,sans-serif; color:#111318; background:radial-gradient(600px 300px at 50% 100%, rgba(120,170,255,0.10), rgba(120,170,255,0) 70%); position:relative; overflow:hidden;">
+
+  <div style="height:64px; display:flex; align-items:center; justify-content:space-between; padding:0 40px; position:relative; z-index:5;">
+    <div style="font-weight:700; font-size:15px; letter-spacing:0.02em;">QARE 360°</div>
+    <div style="font-size:14px; color:#4a4d55;">Research Planner</div>
+    <div style="display:flex; align-items:center; gap:22px;">
+      <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:#6b6e76; cursor:pointer;" onClick="{{ reset }}">
+        <span style="display:inline-block;">↻</span><span>Reset</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px; font-size:13px; color:#6b6e76; cursor:pointer;" onClick="{{ reset }}">
+        <span>✕</span><span>Close</span>
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ isStart }}" hint-placeholder-val="{{ true }}">
+    <div style="position:relative; height:calc(100vh - 64px); display:flex; flex-direction:column; align-items:center;">
+      <div style="margin-top:40px; display:flex; background:#f4f4f5; border-radius:999px; padding:4px; gap:2px;">
+        <div style="{{ decideTabStyle }}" onClick="{{ setModeDecide }}">Help Me Decide</div>
+        <div style="{{ knowTabStyle }}" onClick="{{ setModeKnow }}">I Know What I Need</div>
+      </div>
+
+      <sc-if value="{{ isKnowMode }}" hint-placeholder-val="{{ true }}">
+        <div style="margin-top:64px; text-align:center; max-width:640px; padding:0 20px;">
+          <div style="font-size:32px; font-weight:700; margin-bottom:14px;">What would you like to find out?</div>
+          <div style="font-size:16px; color:#5b5e66; line-height:1.5;">Tell us what you're working on. We'll help you shape the right research approach, timeline and cost indication.</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isDecideMode }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:64px; text-align:center; max-width:640px; padding:0 20px;">
+          <div style="font-size:26px; font-weight:700; margin-bottom:28px;">{{ decideQuestionText }}</div>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:center;">
+            <sc-for list="{{ decideOptions }}" as="opt" hint-placeholder-count="4">
+              <div style="padding:12px 20px; border:1px solid #e2e3e6; border-radius:999px; font-size:14px; color:#26282e; cursor:pointer; background:#fff;" style-hover="border-color:#111318;" onClick="{{ opt.pick }}">{{ opt.label }}</div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ showStartInput }}" hint-placeholder-val="{{ true }}">
+        <div style="position:absolute; bottom:36px; left:50%; transform:translateX(-50%); width:760px; max-width:90vw; display:flex; flex-direction:column; align-items:center; gap:14px;">
+          <div style="display:flex; gap:8px; align-items:center; font-size:13px; color:#9a9ca3;">
+            <span>For example:</span>
+            <sc-for list="{{ examples }}" as="ex" hint-placeholder-count="3">
+              <div style="padding:8px 16px; border:1px solid #e6e7e9; border-radius:999px; color:#4a4d55; cursor:pointer;" onClick="{{ ex.pick }}">{{ ex.label }}</div>
+            </sc-for>
+          </div>
+          <div style="width:100%; display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #ececee; border-radius:999px; box-shadow:0 10px 30px rgba(20,30,60,0.06); padding:8px 10px 8px 22px;">
+            <span style="color:#9a9ca3; font-size:18px;">+</span>
+            <input value="{{ inputText }}" onChange="{{ onInputChange }}" onKeyDown="{{ onInputKeyDown }}" placeholder="Describe what you're trying to understand..." style="flex:1; border:none; outline:none; font-size:15px; font-family:inherit; color:#111318; background:transparent;"/>
+            <svg width="18" height="18" viewBox="0 0 18 18" style="opacity:0.55;"><rect x="6" y="1" width="6" height="10" rx="3" fill="none" stroke="#111318" stroke-width="1.3"/><path d="M3 9a6 6 0 0012 0M9 15v2" stroke="#111318" stroke-width="1.3" fill="none"/></svg>
+            <div style="width:36px; height:36px; border-radius:50%; background:#111318; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;" onClick="{{ submit }}">
+              <span style="color:#fff; font-size:15px;">↑</span>
+            </div>
+          </div>
+          <div style="font-size:11px; color:#b3b5bb;">The Research Planner can make mistakes. All recommendations and prices are indicative.</div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isChat }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex; height:calc(100vh - 64px);">
+      <div style="flex:1; position:relative; overflow-y:auto;">
+        <div style="max-width:640px; margin:60px auto 0; padding:0 20px; text-align:center;">
+          <div style="font-size:17px; line-height:1.7; color:#9a9ca3;">{{ userPrompt }}</div>
+        </div>
+        <div style="max-width:640px; margin:48px auto 0; padding:0 20px;">
+          <sc-if value="{{ hasSummary }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:17px; font-weight:700; margin-bottom:14px;">{{ summaryHeadline }}</div>
+            <div style="font-size:16px; line-height:1.7; color:#3a3d44;">{{ plan.summary }}</div>
+          </sc-if>
+          <sc-if value="{{ isThinking }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:28px; font-size:15px; color:#b3b5bb;">Research assistant is thinking<span style="display:inline-block; animation:qrp-pulse 1.4s infinite;">.</span><span style="display:inline-block; animation:qrp-pulse 1.4s infinite .2s;">.</span><span style="display:inline-block; animation:qrp-pulse 1.4s infinite .4s;">.</span></div>
+          </sc-if>
+          <sc-if value="{{ isReady }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:28px;">
+              <div style="font-size:17px; font-weight:700; margin-bottom:14px;">Your research plan is ready</div>
+              <div style="font-size:16px; line-height:1.7; color:#3a3d44; margin-bottom:22px;">{{ plan.recommendationDescription }}</div>
+              <div style="display:inline-block; background:#111318; color:#fff; font-size:14px; font-weight:600; padding:13px 26px; border-radius:10px; cursor:pointer;" onClick="{{ openPlan }}">View research plan</div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ hasError }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top:24px; color:#b3402f; font-size:14px;">{{ errorText }}</div>
+          </sc-if>
+        </div>
+
+        <div style="position:absolute; bottom:64px; left:50%; transform:translateX(-50%); width:640px; max-width:90vw; display:flex; flex-direction:column; align-items:center; gap:14px;">
+          <div style="display:flex; gap:8px; align-items:center; font-size:13px; color:#9a9ca3;">
+            <span>For example:</span>
+            <sc-for list="{{ examples }}" as="ex" hint-placeholder-count="3">
+              <div style="padding:8px 16px; border:1px solid #e6e7e9; border-radius:999px; color:#4a4d55; cursor:pointer;" onClick="{{ ex.pick }}">{{ ex.label }}</div>
+            </sc-for>
+          </div>
+          <div style="width:100%; display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #ececee; border-radius:999px; box-shadow:0 10px 30px rgba(20,30,60,0.06); padding:8px 10px 8px 22px;">
+            <span style="color:#9a9ca3; font-size:18px;">+</span>
+            <input value="{{ inputText }}" onChange="{{ onInputChange }}" onKeyDown="{{ onInputKeyDown }}" placeholder="Describe what you're trying to understand..." style="flex:1; border:none; outline:none; font-size:15px; font-family:inherit; color:#111318; background:transparent;"/>
+            <svg width="18" height="18" viewBox="0 0 18 18" style="opacity:0.55;"><rect x="6" y="1" width="6" height="10" rx="3" fill="none" stroke="#111318" stroke-width="1.3"/><path d="M3 9a6 6 0 0012 0M9 15v2" stroke="#111318" stroke-width="1.3" fill="none"/></svg>
+            <div style="width:36px; height:36px; border-radius:50%; background:#111318; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0;" onClick="{{ submit }}">
+              <span style="color:#fff; font-size:15px;">↑</span>
+            </div>
+          </div>
+          <div style="font-size:11px; color:#b3b5bb;">The Research Planner can make mistakes. All recommendations and prices are indicative.</div>
+        </div>
+      </div>
+
+      <div style="width:280px; margin:24px 40px 24px 0; background:#fff; border:1px solid #eee; border-radius:20px; padding:24px; box-shadow:0 10px 30px rgba(20,30,60,0.04); height:fit-content;">
+        <div style="font-size:14px; font-weight:700; margin-bottom:18px;">Your research plan</div>
+        <sc-for list="{{ checklist }}" as="item" hint-placeholder-count="9">
+          <div style="display:flex; align-items:center; gap:10px; padding:8px 0; font-size:14px; color:{{ item.color }};">
+            <div style="{{ item.boxStyle }}">
+              <sc-if value="{{ item.checked }}" hint-placeholder-val="{{ false }}">✓</sc-if>
+            </div>
+            <span>{{ item.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isPlan }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex; height:calc(100vh - 64px); overflow:hidden;">
+      <div style="width:220px; padding:32px 0 32px 40px; flex-shrink:0;">
+        <div style="font-size:14px; font-weight:700; margin-bottom:20px;">Your research plan</div>
+        <sc-for list="{{ navItems }}" as="nav" hint-placeholder-count="9">
+          <div style="{{ nav.style }}" onClick="{{ nav.select }}">{{ nav.label }}</div>
+        </sc-for>
+      </div>
+
+      <div style="flex:1; overflow-y:auto; padding:32px 40px;">
+        <div style="max-width:720px;">
+          <div style="font-size:12px; font-weight:700; letter-spacing:0.08em; color:#9a9ca3; margin-bottom:10px;">RESEARCH PLAN</div>
+          <div style="font-size:32px; font-weight:800; margin-bottom:14px;">{{ activeSection.title }}</div>
+          <div style="font-size:16px; line-height:1.6; color:#4a4d55; margin-bottom:16px;">{{ activeSection.intro }}</div>
+
+          <sc-if value="{{ showTags }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; gap:8px; margin-bottom:28px;">
+              <sc-for list="{{ plan.tags }}" as="tag" hint-placeholder-count="3">
+                <div style="background:#f2f3f4; color:#4a4d55; font-size:12px; padding:6px 14px; border-radius:999px;">{{ tag }}</div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showRecommendationCards }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fafafa; border-radius:16px; padding:24px; margin-bottom:16px;">
+              <div style="font-size:15px; font-weight:700; margin-bottom:8px;">Our recommendation</div>
+              <div style="font-size:14px; line-height:1.6; color:#4a4d55;">{{ plan.recommendedApproach }}</div>
+            </div>
+            <div style="background:#fafafa; border-radius:16px; padding:24px; margin-bottom:16px;">
+              <div style="font-size:15px; font-weight:700; margin-bottom:16px;">Study design</div>
+              <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee; font-size:14px;"><span style="color:#6b6e76;">Exposed group</span><span>{{ plan.studyDesign.groupADetail }}</span></div>
+              <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee; font-size:14px;"><span style="color:#6b6e76;">Non-exposed group</span><span>{{ plan.studyDesign.groupBDetail }}</span></div>
+              <div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid #eee; font-size:14px;"><span style="color:#6b6e76;">Measures</span><span>{{ plan.studyDesign.measures }}</span></div>
+              <div style="display:flex; justify-content:space-between; padding:10px 0; font-size:14px;"><span style="color:#6b6e76;">Analysis</span><span>{{ plan.studyDesign.analysis }}</span></div>
+            </div>
+            <div style="background:#fafafa; border-radius:16px; padding:24px; margin-bottom:16px;">
+              <div style="font-size:15px; font-weight:700; margin-bottom:8px;">Included in the research basis</div>
+              <div style="font-size:14px; line-height:1.6; color:#4a4d55;">{{ plan.includedBasis }}</div>
+            </div>
+            <div style="background:#fdf6e3; border-radius:14px; padding:18px 22px; font-size:13px; color:#8a6d1f;">Note: {{ plan.note }}</div>
+          </sc-if>
+
+          <sc-if value="{{ showQuestionsList }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ plan.researchQuestions }}" as="q" hint-placeholder-count="4">
+              <div style="display:flex; gap:12px; padding:14px 0; border-bottom:1px solid #eee; font-size:15px; color:#26282e;">
+                <span style="color:#c9cacd;">—</span><span>{{ q }}</span>
+              </div>
+            </sc-for>
+          </sc-if>
+
+          <sc-if value="{{ showObjectiveGoals }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fafafa; border-radius:16px; padding:24px;">
+              <div style="font-size:15px; font-weight:700; margin-bottom:14px;">This research will help you to</div>
+              <sc-for list="{{ objectiveGoals }}" as="g" hint-placeholder-count="3">
+                <div style="display:flex; gap:12px; padding:10px 0; font-size:14px; color:#3a3d44;">
+                  <span style="width:20px;height:20px;border-radius:50%;background:#111318;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✓</span>
+                  <span>{{ g }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showAudienceProfile }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fafafa; border-radius:16px; padding:24px; margin-bottom:16px;">
+              <div style="font-size:15px; font-weight:700; margin-bottom:8px;">Sample size</div>
+              <div style="font-size:14px; color:#4a4d55;">{{ audienceSampleSize }}</div>
+            </div>
+            <div style="background:#fafafa; border-radius:16px; padding:24px;">
+              <div style="font-size:15px; font-weight:700; margin-bottom:14px;">Sample criteria</div>
+              <sc-for list="{{ audienceCriteria }}" as="c" hint-placeholder-count="3">
+                <div style="display:flex; gap:12px; padding:10px 0; border-bottom:1px solid #eee; font-size:14px; color:#3a3d44;">
+                  <span style="color:#c9cacd;">—</span><span>{{ c }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showDeliverableItems }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ deliverableItems }}" as="d" hint-placeholder-count="4">
+              <div style="display:flex; gap:14px; background:#fafafa; border-radius:14px; padding:18px 20px; margin-bottom:12px;">
+                <span style="width:8px;height:8px;border-radius:50%;background:#111318;margin-top:7px;flex-shrink:0;"></span>
+                <span style="font-size:14px; line-height:1.6; color:#26282e;">{{ d }}</span>
+              </div>
+            </sc-for>
+          </sc-if>
+
+          <sc-if value="{{ showTimelinePhases }}" hint-placeholder-val="{{ false }}">
+            <sc-for list="{{ timelinePhases }}" as="p" hint-placeholder-count="4">
+              <div style="display:flex; gap:20px; padding:18px 0; border-bottom:1px solid #eee;">
+                <div style="width:100px; flex-shrink:0; font-size:12px; font-weight:700; color:#9a9ca3; letter-spacing:0.04em; padding-top:2px;">{{ p.duration }}</div>
+                <div>
+                  <div style="font-size:15px; font-weight:700; margin-bottom:4px;">{{ p.phase }}</div>
+                  <div style="font-size:14px; color:#4a4d55; line-height:1.5;">{{ p.description }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </sc-if>
+
+          <sc-if value="{{ showInvestmentBreakdown }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fafafa; border-radius:16px; padding:24px;">
+              <div style="font-size:15px; font-weight:700; margin-bottom:16px;">Cost breakdown</div>
+              <sc-for list="{{ investmentBreakdown }}" as="b" hint-placeholder-count="3">
+                <div style="display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid #eee; font-size:14px;">
+                  <span style="color:#4a4d55;">{{ b.item }}</span><span style="font-weight:600;">€{{ b.amount }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showAssumptionsList }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fafafa; border-radius:16px; padding:24px;">
+              <sc-for list="{{ assumptionsList }}" as="a" hint-placeholder-count="3">
+                <div style="display:flex; gap:12px; padding:10px 0; border-bottom:1px solid #eee; font-size:14px; color:#3a3d44;">
+                  <span style="color:#c9cacd;">—</span><span>{{ a }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="width:300px; margin:24px 40px 24px 0; background:#fbfbfc; border:1px solid #eee; border-radius:20px; padding:24px; flex-shrink:0; height:fit-content;">
+        <div style="font-size:11px; font-weight:700; letter-spacing:0.06em; color:#9a9ca3; margin-bottom:6px;">CUSTOMISE YOUR PLAN</div>
+        <div style="font-size:16px; font-weight:700; margin-bottom:18px;">Optional additions</div>
+        <sc-for list="{{ additionRows }}" as="row" hint-placeholder-count="4">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid #eee; cursor:pointer;" onClick="{{ row.toggle }}">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div style="{{ row.boxStyle }}"><sc-if value="{{ row.checked }}" hint-placeholder-val="{{ false }}">✓</sc-if></div>
+              <span style="font-size:14px;">{{ row.label }}</span>
+            </div>
+            <span style="font-size:13px; color:#6b6e76;">+ €{{ row.price }}</span>
+          </div>
+        </sc-for>
+
+        <div style="background:#111318; border-radius:14px; padding:20px; margin-top:20px; color:#fff;">
+          <div style="font-size:11px; letter-spacing:0.06em; color:#9a9ca3; margin-bottom:8px;">ESTIMATED INVESTMENT</div>
+          <div style="font-size:28px; font-weight:800; margin-bottom:10px;">€{{ totalFormatted }}</div>
+          <div style="font-size:12px; color:#c9cacd;">excl. VAT</div>
+        </div>
+        <div style="text-align:center; background:#111318; color:#fff; font-size:14px; font-weight:600; padding:14px; border-radius:10px; margin-top:16px; cursor:pointer;">Discuss plan with a researcher</div>
+        <div style="text-align:center; font-size:12px; color:#6b6e76; margin-top:14px; cursor:pointer;" onClick="{{ backToChat }}">Back to conversation</div>
+        <div style="font-size:11px; color:#b3b5bb; margin-top:14px; line-height:1.5;">Indicative plan and price. We'll confirm feasibility and final costs before starting.</div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1440, &quot;height&quot;: 900}, &quot;useSonnet&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;}, &quot;defaultMode&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;know&quot;, &quot;options&quot;: [&quot;know&quot;, &quot;decide&quot;], &quot;tsType&quot;: &quot;string&quot;}}">
+const CHECKLIST_LABELS = ['Research objective','Research questions','Audience & sample','Recruitment','Measures','Deliverables','Timeline','Investment','Assumptions'];
+const NAV_ITEMS = [
+  {id:'objective', label:'Research objective'},
+  {id:'recommendation', label:'Our recommendation'},
+  {id:'questions', label:'Research questions'},
+  {id:'approach', label:'Recommended approach'},
+  {id:'audience', label:'Audience & sample'},
+  {id:'deliverables', label:'Deliverables'},
+  {id:'timeline', label:'Timeline'},
+  {id:'investment', label:'Investment'},
+  {id:'assumptions', label:'Assumptions'}
+];
+const EXAMPLES = ['Validate an idea', 'Measure campaign impact', 'Understand an audience'];
+const DECIDE_STEPS = [
+  { text: "What's your goal?", options: ['Validate an idea', 'Measure campaign impact', 'Understand an audience', 'Explore a new market'] },
+  { text: 'Who do you want to learn from?', options: ['Consumers', 'B2B professionals', 'Existing customers', 'General public'] },
+  { text: 'How soon do you need results?', options: ['As soon as possible', '2–4 weeks', '1–2 months', 'Flexible'] }
+];
+
+class Component extends DCLogic {
+  state = {
+    mode: 'know',
+    screen: 'start',
+    inputText: '',
+    decideStep: 0,
+    decideAnswers: {},
+    userPrompt: '',
+    plan: null,
+    checkedCount: 0,
+    apiDone: false,
+    error: null,
+    activeNav: 'recommendation',
+    additions: {}
+  };
+
+  reset = () => {
+    if (this._interval) clearInterval(this._interval);
+    this.setState({ mode: 'know', screen: 'start', inputText: '', decideStep: 0, decideAnswers: {}, userPrompt: '', plan: null, checkedCount: 0, apiDone: false, error: null, activeNav: 'recommendation', additions: {} });
+  };
+
+  setModeDecide = () => this.setState({ mode: 'decide', decideStep: 0, decideAnswers: {} });
+  setModeKnow = () => this.setState({ mode: 'know' });
+
+  onInputChange = (e) => this.setState({ inputText: e.target.value });
+  onInputKeyDown = (e) => { if (e.key === 'Enter') this.submit(); };
+
+  pickExample = (label) => this.setState({ inputText: label });
+
+  pickDecideOption = (stepIdx, label) => {
+    const keys = ['goal', 'audience', 'timing'];
+    const answers = { ...this.state.decideAnswers, [keys[stepIdx]]: label };
+    if (stepIdx < 2) {
+      this.setState({ decideAnswers: answers, decideStep: stepIdx + 1 });
+    } else {
+      const prompt = `Goal: ${answers.goal}. Audience: ${answers.audience}. Timeline needed: ${label}.`;
+      this.setState({ decideAnswers: answers }, () => this.submit(prompt));
+    }
+  };
+
+  submit = (overridePrompt) => {
+    const prompt = overridePrompt || this.state.inputText.trim();
+    if (!prompt) return;
+    this.setState({ screen: 'chat', userPrompt: prompt, inputText: '', checkedCount: 0, apiDone: false, plan: null, error: null });
+    this._interval = setInterval(() => {
+      this.setState((s) => s.checkedCount < 9 ? { checkedCount: s.checkedCount + 1 } : s);
+    }, 380);
+    this.callClaude(prompt);
+  };
+
+  callClaude = async (prompt) => {
+    const system = `You are a research planning assistant for "QARE 360°", a market research agency. Given a user's research goal, respond with ONLY valid JSON (no markdown fences, no commentary) matching exactly this shape:
+{
+ "summary": "2-3 plain sentences summarizing the topic/context in third person, informative not salesy",
+ "recommendationTitle": "short study name (3-5 words)",
+ "recommendationDescription": "1 sentence describing the tailored recommendation, ready to show after 'we recommend...'",
+ "tags": ["e.g. 300 respondents","e.g. 4-6 weeks","Indicative plan"],
+ "objective": "1 paragraph describing the research objective tailored to the prompt",
+ "objectiveGoals": ["goal statement 1","goal statement 2","goal statement 3"],
+ "researchQuestions": ["question 1","question 2","question 3","question 4"],
+ "recommendedApproach": "1 paragraph describing the recommended methodology",
+ "studyDesign": {"groupADetail":"e.g. 150 · recruited through own channels","groupBDetail":"e.g. 150 · matched online panel","measures":"short phrase","analysis":"short phrase"},
+ "includedBasis": "1 paragraph listing what's included in the research basis",
+ "note": "one short caveat sentence about interpretation of results",
+ "audienceSample": "1 paragraph describing target audience and sample",
+ "audienceProfile": {"sampleSize":"e.g. 300 respondents","criteria":["criterion 1","criterion 2","criterion 3"]},
+ "deliverables": "1 paragraph describing deliverables",
+ "deliverableItems": ["deliverable 1","deliverable 2","deliverable 3","deliverable 4"],
+ "timeline": "1 paragraph describing timeline phases",
+ "timelinePhases": [{"phase":"Setup & design","duration":"Week 1","description":"short description"},{"phase":"Fieldwork","duration":"Weeks 2-4","description":"short description"},{"phase":"Analysis","duration":"Week 5","description":"short description"},{"phase":"Reporting","duration":"Week 6","description":"short description"}],
+ "assumptions": "1 paragraph listing key assumptions",
+ "assumptionsList": ["assumption 1","assumption 2","assumption 3"],
+ "estimatedInvestment": 7250,
+ "investmentBreakdown": [{"item":"Study design & setup","amount":1200},{"item":"Fieldwork & data collection","amount":3800},{"item":"Analysis & reporting","amount":2250}],
+ "optionalAdditions": [{"label":"...","price":500},{"label":"...","price":650},{"label":"...","price":750},{"label":"...","price":900}]
+}
+Keep language concise, professional, in English. Tailor all content specifically to the user's stated topic. Numbers should be realistic for market research (respondents 100-500, timeline 2-8 weeks, investment 3000-15000 EUR). investmentBreakdown amounts must sum to estimatedInvestment.`;
+    try {
+      const modelBody = { messages: [{ role: 'user', content: prompt }], system, max_tokens: 3200 };
+      if (this.props.useSonnet) modelBody.model = 'claude-sonnet-4-5';
+      const text = await window.claude.complete(modelBody);
+      const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const plan = JSON.parse(cleaned);
+      this.setState({ plan, apiDone: true });
+    } catch (err) {
+      this.setState({ error: 'Something went wrong generating your plan. Please try again.', apiDone: true, checkedCount: 9 });
+    }
+  };
+
+  openPlan = () => this.setState({ screen: 'plan', activeNav: 'recommendation' });
+  backToChat = () => this.setState({ screen: 'chat' });
+  selectNav = (id) => this.setState({ activeNav: id });
+  toggleAddition = (label) => this.setState((s) => ({ additions: { ...s.additions, [label]: !s.additions[label] } }));
+
+  buildSection(plan, id) {
+    const map = {
+      objective: { title: 'Research objective', intro: plan.objective },
+      recommendation: { title: plan.recommendationTitle || 'Our recommendation', intro: plan.recommendationDescription },
+      questions: { title: 'Research questions', intro: 'The key questions this study is designed to answer.' },
+      approach: { title: 'Recommended approach', intro: plan.recommendedApproach },
+      audience: { title: 'Audience & sample', intro: plan.audienceSample },
+      deliverables: { title: 'Deliverables', intro: plan.deliverables },
+      timeline: { title: 'Timeline', intro: plan.timeline },
+      investment: { title: 'Investment', intro: `Estimated investment: €${(plan.estimatedInvestment || 0).toLocaleString('en-US')} excl. VAT.` },
+      assumptions: { title: 'Assumptions', intro: plan.assumptions }
+    };
+    return map[id] || map.recommendation;
+  }
+
+  componentWillUnmount() { if (this._interval) clearInterval(this._interval); }
+
+  renderVals() {
+    const s = this.state;
+    const isKnowMode = s.mode === 'know';
+    const isDecideMode = s.mode === 'decide';
+    const decideStepData = DECIDE_STEPS[s.decideStep] || DECIDE_STEPS[0];
+
+    const examples = EXAMPLES.map((label) => ({ label, pick: () => this.pickExample(label) }));
+
+    const checklist = CHECKLIST_LABELS.map((label, i) => {
+      const checked = i < s.checkedCount;
+      return {
+        label, checked,
+        color: checked ? '#111318' : '#b3b5bb',
+        boxStyle: `width:18px;height:18px;border-radius:5px;border:1.5px solid ${checked ? '#111318' : '#dcdde0'};background:${checked ? '#111318' : '#fff'};color:#fff;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;`
+      };
+    });
+
+    const plan = s.plan || {};
+    const activeSection = s.plan ? this.buildSection(plan, s.activeNav) : { title: '', intro: '' };
+    const navItems = NAV_ITEMS.map((n) => ({
+      label: n.label,
+      select: () => this.selectNav(n.id),
+      style: `padding:10px 14px; border-radius:10px; font-size:14px; margin-bottom:2px; cursor:pointer; ${n.id === s.activeNav ? 'background:#eef2ff;color:#111318;font-weight:600;' : 'color:#4a4d55;'}`
+    }));
+
+    const additionsSrc = (s.plan && plan.optionalAdditions) || [];
+    const additionRows = additionsSrc.map((a) => {
+      const checked = !!s.additions[a.label];
+      return {
+        label: a.label, price: a.price, checked,
+        toggle: () => this.toggleAddition(a.label),
+        boxStyle: `width:16px;height:16px;border-radius:4px;border:1.5px solid ${checked ? '#111318' : '#dcdde0'};background:${checked ? '#111318' : '#fff'};color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;`
+      };
+    });
+    const total = (plan.estimatedInvestment || 0) + additionsSrc.reduce((sum, a) => sum + (s.additions[a.label] ? a.price : 0), 0);
+
+    return {
+      isStart: s.screen === 'start',
+      isChat: s.screen === 'chat',
+      isPlan: s.screen === 'plan',
+      isKnowMode, isDecideMode,
+      showStartInput: isKnowMode,
+      decideTabStyle: `padding:10px 22px;border-radius:999px;font-size:14px;cursor:pointer;${isDecideMode ? 'background:#111318;color:#fff;' : 'color:#9a9ca3;'}`,
+      knowTabStyle: `padding:10px 22px;border-radius:999px;font-size:14px;cursor:pointer;${isKnowMode ? 'background:#111318;color:#fff;' : 'color:#9a9ca3;'}`,
+      setModeDecide: this.setModeDecide, setModeKnow: this.setModeKnow,
+      decideQuestionText: decideStepData.text,
+      decideOptions: decideStepData.options.map((label) => ({ label, pick: () => this.pickDecideOption(s.decideStep, label) })),
+      examples,
+      inputText: s.inputText, onInputChange: this.onInputChange, onInputKeyDown: this.onInputKeyDown, submit: () => this.submit(),
+      reset: this.reset,
+      userPrompt: s.userPrompt,
+      hasSummary: !!(s.plan && plan.summary),
+      summaryHeadline: "Here's a short summary based on your input",
+      plan,
+      isThinking: !s.apiDone && !s.error,
+      isReady: s.apiDone && !!s.plan && !s.error,
+      hasError: !!s.error,
+      errorText: s.error,
+      openPlan: this.openPlan,
+      checklist,
+      activeSection,
+      navItems,
+      showTags: s.activeNav === 'recommendation' && !!plan.tags,
+      showRecommendationCards: s.activeNav === 'recommendation',
+      showQuestionsList: s.activeNav === 'questions' && !!plan.researchQuestions,
+      showObjectiveGoals: s.activeNav === 'objective' && !!plan.objectiveGoals,
+      objectiveGoals: plan.objectiveGoals || [],
+      showAudienceProfile: s.activeNav === 'audience' && !!plan.audienceProfile,
+      audienceSampleSize: plan.audienceProfile ? plan.audienceProfile.sampleSize : '',
+      audienceCriteria: plan.audienceProfile ? plan.audienceProfile.criteria || [] : [],
+      showDeliverableItems: s.activeNav === 'deliverables' && !!plan.deliverableItems,
+      deliverableItems: plan.deliverableItems || [],
+      showTimelinePhases: s.activeNav === 'timeline' && !!plan.timelinePhases,
+      timelinePhases: plan.timelinePhases || [],
+      showInvestmentBreakdown: s.activeNav === 'investment' && !!plan.investmentBreakdown,
+      investmentBreakdown: plan.investmentBreakdown || [],
+      showAssumptionsList: s.activeNav === 'assumptions' && !!plan.assumptionsList,
+      assumptionsList: plan.assumptionsList || [],
+      additionRows,
+      totalFormatted: total.toLocaleString('en-US'),
+      backToChat: this.backToChat
+    };
+  }
+}
+</script>
+</body>
+</html>

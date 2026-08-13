@@ -1,36 +1,46 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# QARE 360° — Research Planner
 
-## Getting Started
+Next.js app for the QARE Research Planner: a conversational intake that generates a structured, indicative research plan via Claude.
 
-First, run the development server:
+Ported from the Design Compiler prototype in `briefing/Qare Research Planner.dc.html`.
+
+## Setup
 
 ```bash
+npm install
+cp .env.example .env.local
+# Add your ANTHROPIC_API_KEY to .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+  app/
+    page.tsx              # Research Planner (main UI)
+    api/plan/route.ts     # POST — generates plan JSON via Anthropic
+  components/planner/     # Start, chat & plan screens
+  lib/planner/            # Types, constants, prompt, section helpers
+briefing/                 # Original DC prototype (reference)
+```
 
-## Learn More
+## Flow
 
-To learn more about Next.js, take a look at the following resources:
+1. **Start** — *Help Me Decide* (3-step wizard) or *I Know What I Need* (free text)
+2. **Chat** — summary + checklist progress while the plan is generated
+3. **Plan** — 9 sections, optional add-ons, estimated investment
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Environment
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ANTHROPIC_API_KEY` | Yes | Anthropic API key |
+| `ANTHROPIC_MODEL` | No | Model override (default: `claude-sonnet-4-5-20250929`) |
 
-## Deploy on Vercel
+## Related
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Notion product briefing: [QARE \| Prepare Research Planner product briefing](https://app.notion.com/p/3b8ca1b3c05f81be9bfefb4c89d8e31f)
+- Target repo: `git@github.com:kbellpostman/qare360-agent.git`
