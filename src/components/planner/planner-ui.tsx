@@ -67,11 +67,12 @@ export function ModeTabs({ mode, onSelectKnow, onSelectDecide }: ModeTabsProps) 
 }
 
 interface ChecklistPanelProps {
-  checkedCount: number;
+  checkedCount?: number;
+  checked?: boolean[];
   className?: string;
 }
 
-export function ChecklistPanel({ checkedCount, className }: ChecklistPanelProps) {
+export function ChecklistPanel({ checkedCount, checked, className }: ChecklistPanelProps) {
   const labels = [
     "Research objective",
     "Research questions",
@@ -84,6 +85,9 @@ export function ChecklistPanel({ checkedCount, className }: ChecklistPanelProps)
     "Assumptions",
   ];
 
+  const isChecked = (index: number): boolean =>
+    checked ? Boolean(checked[index]) : index < (checkedCount ?? 0);
+
   return (
     <aside
       className={cn(
@@ -91,27 +95,34 @@ export function ChecklistPanel({ checkedCount, className }: ChecklistPanelProps)
         className,
       )}
     >
-      <div className="mb-4 text-sm font-bold">Your research plan</div>
+      <div className="mb-4 flex items-center justify-between text-sm font-bold">
+        <span>Your research plan</span>
+        {checked && (
+          <span className="text-xs font-medium text-[#b3b5bb]">
+            {checked.filter(Boolean).length}/{checked.length}
+          </span>
+        )}
+      </div>
       <ul className="space-y-0">
         {labels.map((label, index) => {
-          const checked = index < checkedCount;
+          const isDone = isChecked(index);
           return (
             <li
               key={label}
               className={cn(
                 "flex items-center gap-2.5 py-2 text-sm",
-                checked ? "text-[#111318]" : "text-[#b3b5bb]",
+                isDone ? "text-[#111318]" : "text-[#b3b5bb]",
               )}
             >
               <span
                 className={cn(
                   "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] text-xs",
-                  checked
+                  isDone
                     ? "border-[#111318] bg-[#111318] text-white"
                     : "border-[#dcdde0] bg-white",
                 )}
               >
-                {checked ? "✓" : null}
+                {isDone ? "✓" : null}
               </span>
               {label}
             </li>
@@ -139,19 +150,21 @@ export function PromptInput({
 }: PromptInputProps) {
   return (
     <div className="flex w-full max-w-[760px] flex-col items-center gap-3.5">
-      <div className="flex flex-wrap items-center justify-center gap-2 text-[13px] text-[#9a9ca3]">
-        <span>For example:</span>
-        {examples.map((label) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => onPickExample(label)}
-            className="cursor-pointer rounded-full border border-[#e6e7e9] px-4 py-2 text-[#4a4d55]"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {examples.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-center gap-2 text-[13px] text-[#9a9ca3]">
+          <span>For example:</span>
+          {examples.map((label) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => onPickExample(label)}
+              className="cursor-pointer rounded-full border border-[#e6e7e9] px-4 py-2 text-[#4a4d55]"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="flex w-full items-center gap-3 rounded-full border border-[#ececee] bg-white px-2.5 py-2 pl-5 shadow-[0_10px_30px_rgba(20,30,60,0.06)]">
         <span className="text-lg text-[#9a9ca3]">+</span>
