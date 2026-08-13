@@ -118,12 +118,15 @@ export function ResearchPlanner() {
 
               if (parsed.delta) {
                 fullText += parsed.delta;
+                // Strip [CHIPS: ...] from displayed text — chips appear separately
+                const chipsIdx = fullText.lastIndexOf("[CHIPS:");
+                const displayText = chipsIdx >= 0 ? fullText.slice(0, chipsIdx).trim() : fullText;
                 // Update last assistant message
                 setState((current) => {
                   const msgs = [...current.messages];
                   msgs[msgs.length - 1] = {
                     role: "assistant",
-                    content: fullText,
+                    content: displayText,
                   };
                   return { ...current, messages: msgs, isThinking: true };
                 });
