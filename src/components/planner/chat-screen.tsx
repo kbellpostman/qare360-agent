@@ -91,8 +91,7 @@ export function ChatScreen({
             {showThinking ? (
               <div className="mb-5 flex justify-start">
                 <div className="rounded-2xl bg-[#f2f3f5] px-4 py-3 text-[15px] text-[#9a9ca3]">
-                  Account manager is typing
-                  <ThinkingDots />
+                  <RotatingStatus />
                 </div>
               </div>
             ) : null}
