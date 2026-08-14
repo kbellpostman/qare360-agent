@@ -16,6 +16,7 @@ interface ChatScreenProps {
   plan: ResearchPlan | null;
   suggestions: string[];
   progress: Record<string, boolean> | null;
+  explain: { title?: string; text?: string } | null;
   isThinking: boolean;
   error: string | null;
   inputText: string;
@@ -23,6 +24,7 @@ interface ChatScreenProps {
   onSubmit: () => void;
   onPickSuggestion: (suggestion: string) => void;
   onPickExample: (label: string) => void;
+  onConfirmGenerate: () => void;
   onOpenPlan: () => void;
 }
 
@@ -31,6 +33,7 @@ export function ChatScreen({
   plan,
   suggestions,
   progress,
+  explain,
   isThinking,
   error,
   inputText,
@@ -38,6 +41,7 @@ export function ChatScreen({
   onSubmit,
   onPickSuggestion,
   onPickExample,
+  onConfirmGenerate,
   onOpenPlan,
 }: ChatScreenProps) {
   const lastMsg = messages[messages.length - 1];
@@ -45,6 +49,12 @@ export function ChatScreen({
   const showThinking = isThinking && !isStreaming;
   const isReady = !!plan && !isThinking && !error;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Vraagt de account manager om bevestiging om het plan te genereren?
+  const askingConfirm =
+    !isThinking && !plan && !!lastMsg && lastMsg.role === "assistant" &&
+    isConfirmationRequest(lastMsg.content);
 
   // Progressieve checklist: de account manager levert het progress-object aan.
   // Prioriteit: plan klaar (alles ✓) > account manager progress > heuristiek.
@@ -53,6 +63,18 @@ export function ChatScreen({
     : progress
     ? progressToChecks(progress)
     : computeChecklistProgress(messages);
+
+  const rail = (
+    <>
+      {explain && (explain.title || explain.text) ? (
+        <ExplainPanel
+          explain={explain}
+          defaultOpen={wantsExplanation(messages)}
+        />
+      ) : null}
+      <ChecklistPanel checked={checklistChecks} />
+    </>
+  );
 
   // Auto-scroll naar beneden als er nieuwe berichten bijkomen.
   // if: de container heeft alleen overflow zodra de inhoud hoger is dan het
@@ -111,6 +133,18 @@ export function ChatScreen({
                           </div>
                         ) : null}
 
+            {askingConfirm ? (
+              <div className="mb-6 mt-3 flex justify-start">
+                <button
+                  type="button"
+                  onClick={onConfirmGenerate}
+                  className="cursor-pointer rounded-[12px] bg-[#111318] px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition-transform hover:-translate-y-0.5"
+                >
+                  Generate proposal →
+                </button>
+              </div>
+            ) : null}
+
             {isReady ? (
               <div className="mt-7 rounded-2xl border border-[#e6e7ea] p-5">
                 <h2 className="mb-2 text-[17px] font-bold">Your research plan is ready</h2>
@@ -145,10 +179,43 @@ export function ChatScreen({
         </div>
       </div>
 
-      <ChecklistPanel
-        checked={checklistChecks}
-        className="mr-10 mt-6 w-[280px] shrink-0"
-      />
+      {/* Desktop: zijbalk naast de chat */}
+      <div className="mr-10 mt-6 hidden w-[280px] shrink-0 flex-col gap-4 lg:flex">
+        {rail}
+      </div>
+
+      {/* Mobiel: zwevend knopje opent de zijbalk als drawer */}
+      <button
+        type="button"
+        onClick={() => setDrawerOpen(true)}
+        className="fixed bottom-24 right-4 z-30 flex cursor-pointer items-center gap-1.5 rounded-full bg-[#111318] px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg lg:hidden"
+      >
+        Checklist
+      </button>
+
+      {drawerOpen ? (
+        <div
+          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+          onClick={() => setDrawerOpen(false)}
+        >
+          <div
+            className="absolute right-0 top-0 h-full w-[290px] overflow-y-auto bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <span className="text-sm font-bold">Your research plan</span>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="cursor-pointer rounded-md px-2 py-1 text-sm text-neutral-500 hover:text-neutral-800"
+              >
+                ✕
+              </button>
+            </div>
+            {rail}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -160,6 +227,15 @@ function ThinkingDots() {
       <span className="inline-block animate-[qrp-pulse_1.4s_infinite_0.2s]">.</span>
       <span className="inline-block animate-[qrp-pulse_1.4s_infinite_0.4s]">.</span>
     </>
+  );
+}
+
+// Vraagt de account manager om bevestiging om het voorstel te genereren?
+function isConfirmationRequest(text: string): boolean {
+  const lowered = text.toLowerCase();
+  return (
+    /(generate|generat|build|maak|genereer|genereren)/.test(lowered) &&
+    /\?$/.test(text.trim())
   );
 }
 
@@ -187,5 +263,44 @@ function RotatingStatus() {
       </span>
       <ThinkingDots />
     </>
+  );
+}
+
+// Adaptief: als de klant ergens om uitleg of toelichting vroeg, laat dan meer zien.
+function wantsExplanation(messages: ChatMessage[]): boolean {
+  return messages.some((m) =>
+    m.role === "user" &&
+    /uitleg|betekent|betekenen|hoe werkt|wat betekent|begrijp (het )?niet|help me|help mij|kan je (dat )?uitlegg/i.test(m.content)
+  );
+}
+
+function ExplainPanel({
+  explain,
+  defaultOpen,
+}: {
+  explain: { title?: string; text?: string };
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const title = explain.title || "Waarom deze vraag?";
+
+  return (
+    <div className="rounded-2xl border border-[#eef0f6] bg-[#fafbff] p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full cursor-pointer items-center justify-between gap-2 text-left"
+      >
+        <span className="text-[13px] font-semibold text-[#5b5f6b]">
+          💡 {title}
+        </span>
+        <span className="text-[11px] text-[#9a9ca3]">{open ? "−" : "+"}</span>
+      </button>
+      {open && explain.text ? (
+        <p className="mt-2 border-t border-[#eef0f6] pt-2 text-[12px] leading-relaxed text-[#6b6e76]">
+          {explain.text}
+        </p>
+      ) : null}
+    </div>
   );
 }
