@@ -38,6 +38,78 @@ function tryParsePlan(text: string): ResearchPlan | null {
 
 const CHIPS_RE = /\[CHIPS:\s*([^\]]+)\]/i;
 const PROGRESS_RE = /\[PROGRESS\]([\s\S]*?)\[\/PROGRESS\]/i;
+const EXPLAIN_RE = /\[EXPLAIN\]([\s\S]*?)\[\/EXPLAIN\]/i;
+
+export interface Explain {
+  title?: string;
+  text?: string;
+}
+
+function parseExplain(text: string): Explain | null {
+  const match = EXPLAIN_RE.exec(text);
+  if (!match) return null;
+  try {
+    const obj = JSON.parse(match[1]) as Record<string, unknown>;
+    const title = typeof obj.title === "string" ? obj.title : undefined;
+    const body = typeof obj.text === "string" ? obj.text : undefined;
+    if (title || body) return { title, text: body };
+  } catch {
+    /* ignore malformed explain */
+  }
+  return null;
+}
+
+/** Slaat een afgerond onderzoeksvoorstel op in de QARE Notion-database. */
+async function storeRequestToNotion(
+  plan: ResearchPlan,
+  topic: string
+): Promise<string | null> {
+  const pat = process.env.NOTION_PAT;
+  const dbId = process.env.QARE_DB_ID;
+  if (!pat || !dbId) {
+    console.error("storeRequestToNotion: NOTION_PAT / QARE_DB_ID ontbreekt");
+    return null;
+  }
+
+  try {
+    const res = await fetch("https://api.notion.com/v1/pages", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${pat}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        parent: { database_id: dbId },
+        properties: {
+          Titel: {
+            title: [{ type: "text", text: { content: plan.recommendationTitle || "Onderzoeksvoorstel" } }],
+          },
+          Onderwerp: {
+            rich_text: [{ type: "text", text: { content: (plan.summary || topic || "").slice(0, 1900) } }],
+          },
+          Aanbeveling: {
+            rich_text: [{ type: "text", text: { content: (plan.recommendationDescription || "").slice(0, 1900) } }],
+          },
+          Investering: {
+            number: typeof plan.estimatedInvestment === "number" ? plan.estimatedInvestment : null,
+          },
+          Status: { select: { name: "Nieuw" } },
+        },
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error("storeRequestToNotion failed:", res.status, body.slice(0, 200));
+      return null;
+    }
+    const data = (await res.json()) as { id?: string };
+    return data.id ?? null;
+  } catch (err) {
+    console.error("storeRequestToNotion error:", err);
+    return null;
+  }
+}
 
 function parseProgress(text: string): Record<string, boolean> | null {
   const match = PROGRESS_RE.exec(text);
@@ -57,17 +129,19 @@ function parseReply(text: string): {
   reply: string;
   suggestions: string[];
   progress: Record<string, boolean> | null;
+  explain: Explain | null;
 } {
+  const explain = parseExplain(text);
   const progress = parseProgress(text);
-  const textNoProgress = text.replace(PROGRESS_RE, "").trim();
-  const match = CHIPS_RE.exec(textNoProgress);
-  if (!match) return { reply: textNoProgress, suggestions: [], progress };
+  let cleaned = text.replace(PROGRESS_RE, "").replace(EXPLAIN_RE, "").trim();
+  const match = CHIPS_RE.exec(cleaned);
+  if (!match) return { reply: cleaned, suggestions: [], progress, explain };
   const suggestions = match[1]
     .split("|")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-  const reply = textNoProgress.replace(CHIPS_RE, "").trim();
-  return { reply, suggestions, progress };
+  const reply = cleaned.replace(CHIPS_RE, "").trim();
+  return { reply, suggestions, progress, explain };
 }
 
 export async function POST(request: Request) {
@@ -136,10 +210,14 @@ export async function POST(request: Request) {
     }
 
     const plan = tryParsePlan(content);
-    if (plan) return NextResponse.json({ plan });
+    if (plan) {
+      const topic = history.find((m) => m.role === "user")?.content ?? "";
+      const notionId = await storeRequestToNotion(plan, topic);
+      return NextResponse.json({ plan, notionId });
+    }
 
-    const { reply, suggestions, progress } = parseReply(content);
-    return NextResponse.json({ reply, suggestions, progress });
+    const { reply, suggestions, progress, explain } = parseReply(content);
+    return NextResponse.json({ reply, suggestions, progress, explain });
   } catch (error) {
     const detail = error instanceof Error ? error.message : "Plan generation failed.";
     return NextResponse.json({ error: detail }, { status: 502 });
@@ -253,11 +331,15 @@ async function handleStreamingRequest(params: {
         // Send final message
         const plan = tryParsePlan(fullText);
         if (plan) {
+          const topic = history.find((m) => m.role === "user")?.content ?? "";
+          const notionId = await storeRequestToNotion(plan, topic);
           controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ plan })}\n\n`),
+            encoder.encode(
+              `data: ${JSON.stringify({ plan, notionId })}\n\n`,
+            ),
           );
         } else {
-          const { reply, suggestions, progress } = parseReply(fullText);
+          const { reply, suggestions, progress, explain } = parseReply(fullText);
           controller.enqueue(
             encoder.encode(
               `data: ${JSON.stringify({
@@ -265,6 +347,7 @@ async function handleStreamingRequest(params: {
                 reply,
                 suggestions,
                 progress,
+                explain,
               })}\n\n`,
             ),
           );

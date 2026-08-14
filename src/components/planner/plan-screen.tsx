@@ -4,6 +4,7 @@ import { NAV_ITEMS } from "@/lib/planner/constants";
 import { buildSection, formatCurrency } from "@/lib/planner/sections";
 import type { NavSectionId, ResearchPlan } from "@/lib/planner/types";
 import { cn } from "@/lib/utils";
+import { ShareBlock } from "@/components/planner/share-block";
 
 interface PlanScreenProps {
   plan: ResearchPlan;
@@ -32,7 +33,7 @@ export function PlanScreen({
 
   return (
     <div className="flex h-[calc(100vh-64px)] overflow-hidden">
-      <nav className="w-[220px] shrink-0 py-8 pl-10">
+      <nav className="hidden w-[220px] shrink-0 py-8 pl-10 md:block">
         <div className="mb-5 text-sm font-bold">Your research plan</div>
         <ul>
           {NAV_ITEMS.map((item) => (
@@ -204,10 +205,14 @@ export function PlanScreen({
               </ul>
             </InfoCard>
           ) : null}
+
+          <div className="mt-8">
+            <ShareBlock plan={plan} />
+          </div>
         </div>
       </div>
 
-      <aside className="mr-10 mt-6 h-fit w-[300px] shrink-0 rounded-[20px] border border-[#eee] bg-[#fbfbfc] p-6">
+      <aside className="mr-10 mt-6 hidden h-fit w-[300px] shrink-0 rounded-[20px] border border-[#eee] bg-[#fbfbfc] p-6 xl:block">
         <p className="mb-1.5 text-[11px] font-bold tracking-wide text-[#9a9ca3]">
           CUSTOMISE YOUR PLAN
         </p>

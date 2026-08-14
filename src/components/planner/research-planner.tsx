@@ -4,8 +4,14 @@ import { useState } from "react";
 import { flushSync } from "react-dom";
 import { ChatScreen } from "@/components/planner/chat-screen";
 import { PlanScreen } from "@/components/planner/plan-screen";
+import { BuildingPlanScreen } from "@/components/planner/building-plan-screen";
 import { PlannerHeader } from "@/components/planner/planner-ui";
 import { StartScreen } from "@/components/planner/start-screen";
+import {
+  extractPartialPlan,
+  sectionProgress,
+  NAV_ORDER,
+} from "@/lib/planner/partialPlan";
 import type {
   DecideAnswers,
   NavSectionId,
@@ -15,7 +21,7 @@ import type {
 } from "@/lib/planner/types";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
-
+type Explain = { title?: string; text?: string };
 const INITIAL_STATE = {
   mode: "know" as PlannerMode,
   screen: "start" as PlannerScreen,
@@ -25,6 +31,8 @@ const INITIAL_STATE = {
   messages: [] as ChatMessage[],
   suggestions: [] as string[],
   progress: null as Record<string, boolean> | null,
+  explain: null as Explain | null,
+  buildingPlan: null as Partial<ResearchPlan> | null,
   plan: null as ResearchPlan | null,
   isThinking: false,
   error: null as string | null,
@@ -50,6 +58,9 @@ export function ResearchPlanner() {
       messages,
       inputText: "",
       suggestions: [],
+      // progress/explain bewust NIET resetten: de vorige state blijft zichtbaar
+      // zolang de agent bezig is, totdat er een nieuwe update binnenkomt.
+      buildingPlan: null,
       isThinking: true,
       error: null,
       plan: null,
@@ -100,6 +111,7 @@ export function ResearchPlanner() {
                 reply?: string;
                 suggestions?: string[];
                 progress?: Record<string, boolean> | null;
+                explain?: Explain | null;
                 plan?: ResearchPlan;
                 error?: string;
               };
@@ -112,6 +124,8 @@ export function ResearchPlanner() {
                 setState((current) => ({
                   ...current,
                   plan: parsed.plan!,
+                  buildingPlan: null,
+                  activeNav: "recommendation",
                   isThinking: false,
                 }));
                 return;
@@ -119,11 +133,10 @@ export function ResearchPlanner() {
 
               if (parsed.delta) {
                 fullText += parsed.delta;
-                // Strip [PROGRESS]...[/PROGRESS] and [CHIPS: ...] from displayed text
+                // Strip [PROGRESS], [EXPLAIN] en [CHIPS] uit de getoonde tekst
                 let displayText = fullText;
-                // Remove progress metadata blocks
                 displayText = displayText.replace(/\[PROGRESS\][\s\S]*?\[\/PROGRESS\]/g, "");
-                // Hide CHIPS line if present
+                displayText = displayText.replace(/\[EXPLAIN\][\s\S]*?\[\/EXPLAIN\]/g, "");
                 const chipsIdx = displayText.lastIndexOf("[CHIPS:");
                 displayText = chipsIdx >= 0 ? displayText.slice(0, chipsIdx).trim() : displayText.trim();
                 // Update last assistant message — flushSync forces real-time rendering
@@ -137,6 +150,20 @@ export function ResearchPlanner() {
                     return { ...current, messages: msgs, isThinking: true };
                   });
                 });
+
+                // Detectie: is dit een JSON-plan dat aan het streamen is?
+                const partial = extractPartialPlan(fullText);
+                if (Object.keys(partial).length > 0) {
+                  const readyMap = sectionProgress(partial);
+                  const newestReady = [...NAV_ORDER]
+                    .reverse()
+                    .find((id) => readyMap[id]);
+                  setState((current) => ({
+                    ...current,
+                    buildingPlan: partial,
+                    activeNav: newestReady ?? current.activeNav,
+                  }));
+                }
               }
 
               if (parsed.done) {
@@ -151,6 +178,7 @@ export function ResearchPlanner() {
                     messages: msgs,
                     suggestions: parsed.suggestions ?? [],
                     progress: parsed.progress ?? current.progress,
+                    explain: parsed.explain ?? null,
                     isThinking: false,
                   };
                 });
@@ -171,6 +199,7 @@ export function ResearchPlanner() {
           reply?: string;
           suggestions?: string[];
           progress?: Record<string, boolean> | null;
+          explain?: Explain | null;
           error?: string;
         };
 
@@ -192,6 +221,7 @@ export function ResearchPlanner() {
             ],
             suggestions: data.suggestions ?? [],
             progress: data.progress ?? current.progress,
+            explain: data.explain ?? null,
             isThinking: false,
           }));
           return;
@@ -266,18 +296,32 @@ export function ResearchPlanner() {
         />
       ) : null}
 
-      {state.screen === "chat" ? (
+      {state.screen === "chat" &&
+      state.isThinking &&
+      state.buildingPlan &&
+      Object.keys(state.buildingPlan).length > 0 &&
+      !state.plan ? (
+        <BuildingPlanScreen
+          partial={state.buildingPlan}
+          activeNav={state.activeNav}
+          onSelectNav={(id) =>
+            setState((current) => ({ ...current, activeNav: id }))
+          }
+        />
+      ) : state.screen === "chat" ? (
         <ChatScreen
           messages={state.messages}
           plan={state.plan}
           suggestions={state.suggestions}
           progress={state.progress}
+          explain={state.explain}
           isThinking={state.isThinking}
           error={state.error}
           inputText={state.inputText}
           onInputChange={(value) => setState((current) => ({ ...current, inputText: value }))}
           onSubmit={() => submit()}
           onPickSuggestion={(suggestion) => submit(suggestion)}
+          onConfirmGenerate={() => submit("Yes, please generate the proposal")}
           onPickExample={(label) => {
             setState((current) => ({ ...current, inputText: label }));
             void sendMessage(label);
